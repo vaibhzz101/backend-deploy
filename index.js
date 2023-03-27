@@ -1,31 +1,50 @@
-const express = require('express')
-require('dotenv').config();
-const ratelimit = require("express-rate-limit")
-const logger = require('./logger/logger')
-
-const authentication = require('./middleware/auth')
-const limiter = require('./middleware/auth');
-const logInvalidCity =  require('./middleware/auth')
-
-const weatherRouter = require('./routes/weather.routes')
-const app = express();
-const connection = require('./config/db')
-
+const express = require("express")
+const app = express()
+const {connection} = require("./config/db")
+const{userRouter} = require("./routes/user.route")
+const {weatherRouter} = require('./routes/weather.route')
+const rateLimit = require('express-rate-limit')
+const {client} = require("./redis")
+require("dotenv").config()
 app.use(express.json())
 
-app.use('/weather', weatherRouter)
 
-app.use(authentication)
-app.get('weather/:city', logInvalidCity, Cache)
+const limiter = rateLimit({
+	windowMs: 3* 60 * 1000,
+	max: 1, 
+	standardHeaders: true, 
+	legacyHeaders: false, 
+})
 
 
+const winston = require("winston")
+const expressWinston = require("express-winston")
+require("winston-mongodb")
+app.use(expressWinston.logger({
+    statusLevels:true,
+    transports:[
+        new winston.transports.MongoDB({
+            level:true,
+            db:process.env.mongoURL,
+            collection:'logs',
+            json:true
+        })
+    ],
+    format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.json()
+    )
+}));
+
+
+app.use(limiter)
+app.use(weatherRouter)
 app.listen(process.env.port, async()=>{
-    console.log(`server is running at ${process.env.port}`)
-    try{
+    try {
         await connection
-        console.log("db connected")
+        console.log("Connected to Database");
+    } catch (error) {
+        console.log("Error while connecting to Database");
     }
-    catch(err){
-        console.log(err)
-    }
+    console.log(`Server is running at port ${process.env.port}`)
 })
